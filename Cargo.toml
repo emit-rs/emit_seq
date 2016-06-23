@@ -1,0 +1,17 @@
+[package]
+name = "emit_seq"
+version = "0.1.0"
+authors = ["Nicholas Blumhardt <nblumhardt@nblumhardt.com>"]
+description = "A Seq collector for the emit structured logger."
+license = "Apache-2.0"
+homepage = "https://github.com/emit-rs/emit_seq"
+keywords = ["log", "logging"]
+
+[dependencies]
+emit = "0.9.2"
+log = "0.3"
+serde = "0.7"
+serde_json = "0.7"
+chrono = "0.2"
+hyper = "0.8"
+
