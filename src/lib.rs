@@ -2,8 +2,6 @@
 extern crate emit;
 #[macro_use]
 extern crate hyper;
-#[macro_use]
-extern crate log;
 extern crate chrono;
 extern crate serde_json;
 
@@ -11,7 +9,8 @@ use hyper::header::Connection;
 use std::io::Read;
 use std::error::Error;
 use std::fmt::Write;
-use emit::events;
+use emit::LogLevel;
+use emit::events::Event;
 
 pub const DEFAULT_EVENT_BODY_LIMIT_BYTES: usize = 1024 * 256;
 pub const DEFAULT_BATCH_LIMIT_BYTES: usize = 1024 * 1024 * 10;
@@ -68,7 +67,7 @@ const FOOTER: &'static str = "]}";
 const FOOTER_LEN: usize = 2;
 
 impl emit::collectors::AcceptEvents for SeqCollector {
-    fn accept_events(&self, events: &[events::Event<'static>]) -> Result<(), Box<Error>> {
+    fn accept_events(&self, events: &[Event<'static>]) -> Result<(), Box<Error>> {
         let mut next = HEADER.to_owned();
         let mut count = HEADER_LEN + FOOTER_LEN;
         let mut delim = "";
@@ -78,7 +77,8 @@ impl emit::collectors::AcceptEvents for SeqCollector {
             if payload.len() > self.event_body_limit_bytes {
                 payload = format_oversize_placeholder(event);
                 if payload.len() > self.event_body_limit_bytes {
-                    error!("An oversize event was detected but the size limit is so low a placeholder cannot be substituted");
+                    // TODO - self-log
+                    // error!("An oversize event was detected but the size limit is so low a placeholder cannot be substituted");
                     continue;
                 }
             }
@@ -105,7 +105,7 @@ impl emit::collectors::AcceptEvents for SeqCollector {
     }
 }
 
-fn format_payload(event: &events::Event) -> String {
+fn format_payload(event: &Event) -> String {
     let mut body = format!("{{\"Timestamp\":\"{}\",\"Level\":\"{}\",\"MessageTemplate\":{},\"Properties\":{{",
         event.timestamp().format("%FT%TZ"),
         to_seq_level(event.level()),
@@ -127,7 +127,7 @@ fn format_payload(event: &events::Event) -> String {
     body     
 }
 
-fn format_oversize_placeholder(event: &events::Event) -> String {
+fn format_oversize_placeholder(event: &Event) -> String {
     let initial: String = if event.message_template().text().len() > 64 {
         event.message_template().text().chars().take(64).into_iter().collect()
     } else {
@@ -140,7 +140,7 @@ fn format_oversize_placeholder(event: &events::Event) -> String {
         serde_json::to_string(&initial).unwrap())
 }
 
-fn to_seq_level(level: log::LogLevel) -> &'static str {
+fn to_seq_level(level: LogLevel) -> &'static str {
     SEQ_LEVEL_NAMES[level as usize]
 }
 
@@ -149,10 +149,9 @@ mod tests {
     use std::collections;
     use chrono::UTC;
     use chrono::offset::TimeZone;
-    use log;
-    use emit::events;
+    use emit::events::Event;
     use emit::templates;
-    use emit::PipelineBuilder;
+    use emit::{LogLevel,PipelineBuilder};
     use std::env;
     use super::{format_payload,SeqCollector};
     
@@ -161,7 +160,7 @@ mod tests {
         let timestamp = UTC.ymd(2014, 7, 8).and_hms(9, 10, 11);  
         let mut properties = collections::BTreeMap::new();
         properties.insert("number", "42".into());
-        let evt = events::Event::new(timestamp, log::LogLevel::Warn, templates::MessageTemplate::new("The number is {number}"), properties);
+        let evt = Event::new(timestamp, LogLevel::Warn, templates::MessageTemplate::new("The number is {number}"), properties);
         let payload = format_payload(&evt);
         assert_eq!(payload, "{\"Timestamp\":\"2014-07-08T09:10:11Z\",\"Level\":\"Warning\",\"MessageTemplate\":\"The number is {number}\",\"Properties\":{\"number\":42}}".to_owned());
     }
@@ -172,6 +171,6 @@ mod tests {
             .write_to(SeqCollector::new_local())
             .init();
 
-        eminfo!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");
+        info!("Hello, {} at {} in {}!", name: env::var("USERNAME").unwrap_or("User".to_string()), time: 2139, room: "office");
     }
 }
