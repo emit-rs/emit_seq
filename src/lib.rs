@@ -11,12 +11,61 @@ use std::error::Error;
 use std::fmt::Write;
 use emit::LogLevel;
 use emit::events::Event;
+use std::convert::Into;
+use std::borrow::Cow;
 
 pub const DEFAULT_EVENT_BODY_LIMIT_BYTES: usize = 1024 * 256;
 pub const DEFAULT_BATCH_LIMIT_BYTES: usize = 1024 * 1024 * 10;
 pub const LOCAL_SERVER_URL: &'static str = "http://localhost:5341/";
 
 header! { (XSeqApiKey, "X-Seq-ApiKey") => [String] }
+
+pub struct SeqCollectorBuilder {
+    api_key: Option<Cow<'static, str>>, 
+    event_body_limit_bytes: usize, 
+    batch_limit_bytes: usize,
+    server_url: Cow<'static, str>
+}
+
+impl SeqCollectorBuilder {
+    pub fn new() -> Self {
+        SeqCollectorBuilder {
+            api_key: None,
+            event_body_limit_bytes: DEFAULT_EVENT_BODY_LIMIT_BYTES,
+            batch_limit_bytes: DEFAULT_BATCH_LIMIT_BYTES,
+            server_url: LOCAL_SERVER_URL.into()
+        }
+    }
+
+    pub fn server_url<T: Into<String>>(mut self, server_url: T) -> Self {
+        self.server_url = Cow::Owned(server_url.into());
+        self
+    }
+
+    pub fn api_key<T: Into<String>>(mut self, api_key: T) -> Self {
+        self.api_key = Some(Cow::Owned(api_key.into()));
+        self
+    }
+
+    pub fn event_body_limit_bytes(mut self, event_body_limit_bytes: usize) -> Self {
+        self.event_body_limit_bytes = event_body_limit_bytes;
+        self
+    }
+
+    pub fn batch_limit_bytes(mut self, batch_limit_bytes: usize) -> Self {
+        self.batch_limit_bytes = batch_limit_bytes;
+        self
+    }
+
+    pub fn build(self) -> SeqCollector {
+        SeqCollector {
+            api_key: self.api_key.map(|k| k.into_owned()),
+            event_body_limit_bytes: self.event_body_limit_bytes,
+            batch_limit_bytes: self.batch_limit_bytes,
+            endpoint: format!("{}api/events/raw/", self.server_url)
+        }
+    }
+}
 
 // 0 is "OFF", but fatal is the best effort for rendering this if we ever get an
 // event with that level.
@@ -30,17 +79,16 @@ pub struct SeqCollector {
 }
 
 impl SeqCollector {
-    pub fn new<'b>(server_url: &'b str, api_key: Option<&'b str>, event_body_limit_bytes: usize, batch_limit_bytes: usize) -> SeqCollector {
-        SeqCollector {
-            api_key: api_key.map(|k| k.to_owned()),
-            event_body_limit_bytes: event_body_limit_bytes,
-            batch_limit_bytes: batch_limit_bytes,
-            endpoint: format!("{}api/events/raw/", server_url)
-        }
+    pub fn new<T: Into<String>>(server_url: T) -> SeqCollector {
+        Self::builder().server_url(server_url).build()
     }
-    
+
     pub fn new_local() -> SeqCollector {
-        Self::new(LOCAL_SERVER_URL, None, DEFAULT_EVENT_BODY_LIMIT_BYTES, DEFAULT_BATCH_LIMIT_BYTES)
+        Self::builder().build()
+    }
+
+    pub fn builder() -> SeqCollectorBuilder {
+        SeqCollectorBuilder::new()
     }
     
     fn send_batch(&self, payload: &String)  -> Result<(), Box<Error>> {
