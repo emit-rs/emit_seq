@@ -79,6 +79,10 @@ pub struct SeqCollector {
 }
 
 impl SeqCollector {
+    pub fn new<T: Into<String>>(server_url: T) -> SeqCollector {
+        Self::builder().server_url(server_url).build()
+    }
+
     pub fn new_local() -> SeqCollector {
         Self::builder().build()
     }
